@@ -2,6 +2,7 @@ import React from "react";
 import { useState, useEffect, useCallback, useRef, useReducer } from "react";
 import SnakeApp from "./SnakeApp";
 import ChessApp from "./ChessApp";
+import App2048 from "./App2048";
 // ============================================================
 // TYPES & CONSTANTS (TypeScript interfaces as JSDoc comments)
 // ============================================================
@@ -128,6 +129,7 @@ const DESKTOP_ICONS = [
   { id: "contact", label: "Contact", emoji: "📬" },
   { id: "snake", label: "Snake", emoji: "🐍" },
   { id: "chess", label: "Chess", emoji: "♟️" },
+  { id: "2048", label: "2048", emoji: "🧩" },
 ];
 
 // ============================================================
@@ -224,6 +226,19 @@ const initialWindows = [
     y: 40,
     width: 860,
     height: 560,
+    zIndex: 10,
+  },
+  {
+    id: "2048",
+    title: "2048",
+    emoji: "🧩",
+    isOpen: false,
+    isMinimized: false,
+    isMaximized: false,
+    x: 100,
+    y: 60,
+    width: 520,
+    height: 680,
     zIndex: 10,
   },
 ];
@@ -1026,6 +1041,7 @@ export default function App() {
       case "contact": return <ContactApp />;
       case "snake": return <SnakeApp />;
       case "chess": return <ChessApp />;
+      case "2048": return <App2048 />;
       default: return null;
     }
   }, []);
