@@ -329,87 +329,13 @@ function toNotation(move: Move, board: Board): string {
 }
 
 // ============================================================
-// AI — MINIMAX WITH ALPHA-BETA PRUNING (depth 4)
+// AI — delegated entirely to Web Worker (non-blocking)
+// The worker re-implements minimax so the main thread is free
 // ============================================================
-function evaluateBoard(board: Board): number {
-  let score = 0;
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const p = board[r][c];
-      if (!p) continue;
-      const val = PIECE_VALUE[p.type];
-      const pstRow = p.color === "w" ? r : 7 - r;
-      const pst = PST[p.type][pstRow][c];
-      score += p.color === "w" ? val + pst : -(val + pst);
-    }
-  }
-  return score;
-}
 
-function minimax(
-  board: Board,
-  depth: number,
-  alpha: number,
-  beta: number,
-  maximizing: boolean,
-  castlingRights: GameState["castlingRights"],
-  enPassantTarget: [number,number] | null
-): number {
-  if (depth === 0) return evaluateBoard(board);
-
-  const color: Color = maximizing ? "w" : "b";
-  const moves = getLegalMoves(board, color, castlingRights, enPassantTarget);
-
-  if (moves.length === 0) {
-    if (isInCheck(board, color)) return maximizing ? -99999 : 99999;
-    return 0; // stalemate
-  }
-
-  if (maximizing) {
-    let best = -Infinity;
-    for (const move of moves) {
-      const nb = applyMoveToBoard(board, move);
-      const score = minimax(nb, depth - 1, alpha, beta, false, castlingRights, enPassantTarget);
-      best = Math.max(best, score);
-      alpha = Math.max(alpha, best);
-      if (beta <= alpha) break;
-    }
-    return best;
-  } else {
-    let best = Infinity;
-    for (const move of moves) {
-      const nb = applyMoveToBoard(board, move);
-      const score = minimax(nb, depth - 1, alpha, beta, true, castlingRights, enPassantTarget);
-      best = Math.min(best, score);
-      beta = Math.min(beta, best);
-      if (beta <= alpha) break;
-    }
-    return best;
-  }
-}
-
-function getBestMove(
-  board: Board,
-  castlingRights: GameState["castlingRights"],
-  enPassantTarget: [number,number] | null,
-  depth: number = 4
-): Move | null {
-  const moves = getLegalMoves(board, "b", castlingRights, enPassantTarget);
-  if (moves.length === 0) return null;
-
-  let bestMove = moves[0];
-  let bestScore = Infinity;
-
-  for (const move of moves) {
-    const nb = applyMoveToBoard(board, move);
-    const score = minimax(nb, depth - 1, -Infinity, Infinity, true, castlingRights, enPassantTarget);
-    if (score < bestScore) {
-      bestScore = score;
-      bestMove = move;
-    }
-  }
-  return bestMove;
-}
+// Vite's ?worker suffix spins up a dedicated Worker thread
+// import ChessWorker from "./chess.worker?worker";
+// We create the worker lazily inside the hook below.
 
 // ============================================================
 // INITIAL GAME STATE
@@ -456,6 +382,102 @@ function updateCastlingRights(
 }
 
 // ============================================================
+// WORKER LOGIC STRING
+// Inlined as a Blob so no extra build config is needed.
+// This is the complete self-contained minimax implementation
+// that runs inside the Web Worker thread.
+// ============================================================
+const workerLogic = `
+function cloneBoard(board) {
+  return board.map(function(row) { return row.map(function(sq) { return sq ? Object.assign({}, sq) : null; }); });
+}
+function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+var PIECE_VALUE = { K: 20000, Q: 900, R: 500, B: 330, N: 320, P: 100 };
+var PST = {
+  P:[[0,0,0,0,0,0,0,0],[50,50,50,50,50,50,50,50],[10,10,20,30,30,20,10,10],[5,5,10,25,25,10,5,5],[0,0,0,20,20,0,0,0],[5,-5,-10,0,0,-10,-5,5],[5,10,10,-20,-20,10,10,5],[0,0,0,0,0,0,0,0]],
+  N:[[-50,-40,-30,-30,-30,-30,-40,-50],[-40,-20,0,0,0,0,-20,-40],[-30,0,10,15,15,10,0,-30],[-30,5,15,20,20,15,5,-30],[-30,0,15,20,20,15,0,-30],[-30,5,10,15,15,10,5,-30],[-40,-20,0,5,5,0,-20,-40],[-50,-40,-30,-30,-30,-30,-40,-50]],
+  B:[[-20,-10,-10,-10,-10,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,10,10,5,0,-10],[-10,5,5,10,10,5,5,-10],[-10,0,10,10,10,10,0,-10],[-10,10,10,10,10,10,10,-10],[-10,5,0,0,0,0,5,-10],[-20,-10,-10,-10,-10,-10,-10,-20]],
+  R:[[0,0,0,0,0,0,0,0],[5,10,10,10,10,10,10,5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[0,0,0,5,5,0,0,0]],
+  Q:[[-20,-10,-10,-5,-5,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,5,5,5,0,-10],[-5,0,5,5,5,5,0,-5],[0,0,5,5,5,5,0,-5],[-10,5,5,5,5,5,0,-10],[-10,0,5,0,0,0,0,-10],[-20,-10,-10,-5,-5,-10,-10,-20]],
+  K:[[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-20,-30,-30,-40,-40,-30,-30,-20],[-10,-20,-20,-20,-20,-20,-20,-10],[20,20,0,0,0,0,20,20],[20,30,10,0,0,10,30,20]]
+};
+function getPseudoLegal(board, r, c, ep) {
+  var piece = board[r][c]; if (!piece) return [];
+  var moves = []; var type = piece.type; var color = piece.color; var opp = color==='w'?'b':'w';
+  function addMove(tr,tc,extra) {
+    if (!inBounds(tr,tc)) return false;
+    var target = board[tr][tc];
+    if (target && target.color===color) return false;
+    var m = {from:[r,c],to:[tr,tc]}; if(target) m.captured=target; if(extra) Object.assign(m,extra);
+    moves.push(m); return !target;
+  }
+  function slide(dr,dc) { var nr=r+dr,nc=c+dc; while(inBounds(nr,nc)){var cont=addMove(nr,nc);if(!cont)break;nr+=dr;nc+=dc;} }
+  if(type==='P'){
+    var dir=color==='w'?-1:1; var sr=color==='w'?6:1;
+    if(inBounds(r+dir,c)&&!board[r+dir][c]){addMove(r+dir,c);if(r===sr&&!board[r+dir*2][c])addMove(r+dir*2,c);}
+    [-1,1].forEach(function(dc){
+      var nr=r+dir,nc=c+dc;
+      if(inBounds(nr,nc)&&board[nr][nc]&&board[nr][nc].color===opp) addMove(nr,nc);
+      if(ep&&ep[0]===nr&&ep[1]===nc) moves.push({from:[r,c],to:[nr,nc],enPassant:true,captured:{type:'P',color:opp}});
+    });
+  } else if(type==='N'){
+    [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(function(d){addMove(r+d[0],c+d[1]);});
+  } else if(type==='B'){[[-1,-1],[-1,1],[1,-1],[1,1]].forEach(function(d){slide(d[0],d[1]);});}
+  else if(type==='R'){[[-1,0],[1,0],[0,-1],[0,1]].forEach(function(d){slide(d[0],d[1]);});}
+  else if(type==='Q'){[[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]].forEach(function(d){slide(d[0],d[1]);});}
+  else if(type==='K'){[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(function(d){addMove(r+d[0],c+d[1]);});}
+  return moves;
+}
+function findKing(board,color){for(var r=0;r<8;r++)for(var c=0;c<8;c++)if(board[r][c]&&board[r][c].type==='K'&&board[r][c].color===color)return[r,c];return[-1,-1];}
+function isAttacked(board,r,c,byColor){
+  for(var sr=0;sr<8;sr++)for(var sc=0;sc<8;sc++){var p=board[sr][sc];if(!p||p.color!==byColor)continue;var ms=getPseudoLegal(board,sr,sc,null);if(ms.some(function(m){return m.to[0]===r&&m.to[1]===c;}))return true;}return false;
+}
+function isInCheck(board,color){var k=findKing(board,color);return isAttacked(board,k[0],k[1],color==='w'?'b':'w');}
+function applyMove(board,move){
+  var nb=cloneBoard(board); var piece=nb[move.from[0]][move.from[1]];
+  nb[move.to[0]][move.to[1]]=piece; nb[move.from[0]][move.from[1]]=null;
+  if(move.enPassant){var cr=piece.color==='w'?move.to[0]+1:move.to[0]-1;nb[cr][move.to[1]]=null;}
+  if(move.castling){var row=piece.color==='w'?7:0;if(move.castling==='K'){nb[row][5]=nb[row][7];nb[row][7]=null;}else{nb[row][3]=nb[row][0];nb[row][0]=null;}}
+  if(piece.type==='P'&&(move.to[0]===0||move.to[0]===7))nb[move.to[0]][move.to[1]]={type:'Q',color:piece.color};
+  return nb;
+}
+function getLegal(board,color,cr,ep){
+  var moves=[];
+  for(var r=0;r<8;r++)for(var c=0;c<8;c++){if(!board[r][c]||board[r][c].color!==color)continue;var ps=getPseudoLegal(board,r,c,ep);ps.forEach(function(m){var nb=applyMove(board,m);if(!isInCheck(nb,color))moves.push(m);});}
+  var row=color==='w'?7:0; var opp=color==='w'?'b':'w';
+  if(!isInCheck(board,color)){
+    if((color==='w'?cr.wK:cr.bK)&&!board[row][5]&&!board[row][6]&&!isAttacked(board,row,5,opp)&&!isAttacked(board,row,6,opp))moves.push({from:[row,4],to:[row,6],castling:'K'});
+    if((color==='w'?cr.wQ:cr.bQ)&&!board[row][3]&&!board[row][2]&&!board[row][1]&&!isAttacked(board,row,3,opp)&&!isAttacked(board,row,2,opp))moves.push({from:[row,4],to:[row,2],castling:'Q'});
+  }
+  return moves;
+}
+function evaluate(board){
+  var score=0;
+  for(var r=0;r<8;r++)for(var c=0;c<8;c++){var p=board[r][c];if(!p)continue;var v=PIECE_VALUE[p.type];var pr=p.color==='w'?r:7-r;var ps=PST[p.type][pr][c];score+=p.color==='w'?v+ps:-(v+ps);}
+  return score;
+}
+function minimax(board,depth,alpha,beta,max,cr,ep){
+  if(depth===0)return evaluate(board);
+  var color=max?'w':'b'; var moves=getLegal(board,color,cr,ep);
+  if(moves.length===0){if(isInCheck(board,color))return max?-99999:99999;return 0;}
+  if(max){var best=-Infinity;for(var i=0;i<moves.length;i++){var nb=applyMove(board,moves[i]);var s=minimax(nb,depth-1,alpha,beta,false,cr,ep);best=Math.max(best,s);alpha=Math.max(alpha,best);if(beta<=alpha)break;}return best;}
+  else{var best2=Infinity;for(var j=0;j<moves.length;j++){var nb2=applyMove(board,moves[j]);var s2=minimax(nb2,depth-1,alpha,beta,true,cr,ep);best2=Math.min(best2,s2);beta=Math.min(beta,best2);if(beta<=alpha)break;}return best2;}
+}
+function chessWorkerHandler(data) {
+  var board=data.board,cr=data.castlingRights,ep=data.enPassantTarget,depth=data.depth||3;
+  var moves=getLegal(board,'b',cr,ep);
+  if(moves.length===0)return null;
+  var bestMove=moves[0],bestScore=Infinity;
+  for(var i=0;i<moves.length;i++){
+    var nb=applyMove(board,moves[i]);
+    var s=minimax(nb,depth-1,-Infinity,Infinity,true,cr,ep);
+    if(s<bestScore){bestScore=s;bestMove=moves[i];}
+  }
+  return bestMove;
+}
+`;
+
+// ============================================================
 // CHESS APP COMPONENT
 // ============================================================
 export default function ChessApp() {
@@ -463,6 +485,39 @@ export default function ChessApp() {
   const [mode, setMode] = useState<GameMode>("ai");
   const [aiThinking, setAiThinking] = useState(false);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── APPLY AI MOVE — shared by worker result + fallback ──
+  const applyAiMove = useCallback((move: Move) => {
+    setGs(prev => {
+      const newBoard = applyMoveToBoard(prev.board, move);
+      const notation = toNotation(move, prev.board);
+      const newCastling = updateCastlingRights(prev.castlingRights, move, prev.board);
+      let newEP: [number, number] | null = null;
+      const piece = prev.board[move.from[0]][move.from[1]];
+      if (piece?.type === "P" && Math.abs(move.to[0] - move.from[0]) === 2) {
+        newEP = [(move.from[0] + move.to[0]) / 2, move.to[1]];
+      }
+      const nextTurn: Color = "w";
+      const nextLegal = getLegalMoves(newBoard, nextTurn, newCastling, newEP);
+      const check = isInCheck(newBoard, nextTurn);
+      let status: GameState["status"] = "playing";
+      if (nextLegal.length === 0) status = check ? "checkmate" : "stalemate";
+      const newCapturedB = move.captured && move.captured.color === "w"
+        ? [...prev.capturedB, move.captured] : prev.capturedB;
+      const lastLog = prev.moveLog[prev.moveLog.length - 1] ?? "";
+      const newLog = [...prev.moveLog.slice(0, -1), `${lastLog} ${notation}`];
+      return {
+        ...prev, board: newBoard, turn: nextTurn,
+        selectedSq: null, legalMoves: [],
+        history: [...prev.history, move],
+        capturedB: newCapturedB,
+        castlingRights: newCastling,
+        enPassantTarget: newEP,
+        status, inCheck: check ? nextTurn : null,
+        moveLog: newLog,
+      };
+    });
+  }, []);
 
   // ── HANDLE SQUARE CLICK ────────────────────────────────
   const handleSquareClick = useCallback((r: number, c: number) => {
@@ -545,55 +600,85 @@ export default function ChessApp() {
     });
   }, [mode]);
 
-  // ── AI MOVE ────────────────────────────────────────────
+  // ── AI MOVE — runs in a Web Worker so UI never freezes ──
+  const workerRef = useRef<Worker | null>(null);
+
   useEffect(() => {
     if (mode !== "ai" || gs.turn !== "b" || gs.status !== "playing") return;
+
     setAiThinking(true);
-    aiTimerRef.current = setTimeout(() => {
-      const move = getBestMove(gs.board, gs.castlingRights, gs.enPassantTarget, 3);
-      if (!move) { setAiThinking(false); return; }
 
-      setGs(prev => {
-        const newBoard = applyMoveToBoard(prev.board, move);
-        const notation = toNotation(move, prev.board);
-        const newCastling = updateCastlingRights(prev.castlingRights, move, prev.board);
-        let newEP: [number,number] | null = null;
-        const piece = prev.board[move.from[0]][move.from[1]];
-        if (piece?.type === "P" && Math.abs(move.to[0] - move.from[0]) === 2) {
-          newEP = [(move.from[0] + move.to[0]) / 2, move.to[1]];
-        }
+    // Terminate any previous worker that might still be running
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
 
-        const nextTurn: Color = "w";
-        const nextLegal = getLegalMoves(newBoard, nextTurn, newCastling, newEP);
-        const check = isInCheck(newBoard, nextTurn);
-        let status: GameState["status"] = "playing";
-        if (nextLegal.length === 0) status = check ? "checkmate" : "stalemate";
+    // Inline worker via Blob — no build config needed
+    // This avoids the ?worker Vite syntax and works universally
+    const workerCode = `
+      ${workerLogic}
+      self.onmessage = function(e) {
+        var result = chessWorkerHandler(e.data);
+        self.postMessage(result);
+      };
+    `;
+    const blob = new Blob([workerCode], { type: "application/javascript" });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+    workerRef.current = worker;
 
-        const newCapturedB = move.captured && move.captured.color === "w"
-          ? [...prev.capturedB, move.captured] : prev.capturedB;
-
-        const lastLog = prev.moveLog[prev.moveLog.length - 1] ?? "";
-        const newLog = [...prev.moveLog.slice(0, -1), `${lastLog} ${notation}`];
-
-        return {
-          ...prev,
-          board: newBoard,
-          turn: nextTurn,
-          selectedSq: null,
-          legalMoves: [],
-          history: [...prev.history, move],
-          capturedB: newCapturedB,
-          castlingRights: newCastling,
-          enPassantTarget: newEP,
-          status,
-          inCheck: check ? nextTurn : null,
-          moveLog: newLog,
-        };
-      });
+    // Safety timeout — if worker takes > 8s, fall back to random move
+    const safetyTimer = setTimeout(() => {
+      worker.terminate();
+      workerRef.current = null;
+      URL.revokeObjectURL(workerUrl);
+      // Fallback: pick a random legal move
+      const moves = getLegalMoves(gs.board, "b", gs.castlingRights, gs.enPassantTarget);
+      if (moves.length > 0) {
+        applyAiMove(moves[Math.floor(Math.random() * moves.length)]);
+      }
       setAiThinking(false);
-    }, 300); // small delay so UI updates first
+    }, 8000);
 
-    return () => { if (aiTimerRef.current) clearTimeout(aiTimerRef.current); };
+    worker.onmessage = (e: MessageEvent) => {
+      clearTimeout(safetyTimer);
+      worker.terminate();
+      workerRef.current = null;
+      URL.revokeObjectURL(workerUrl);
+      const move: Move | null = e.data;
+      if (move) applyAiMove(move);
+      setAiThinking(false);
+    };
+
+    worker.onerror = () => {
+      clearTimeout(safetyTimer);
+      worker.terminate();
+      workerRef.current = null;
+      URL.revokeObjectURL(workerUrl);
+      // Fallback on error
+      const moves = getLegalMoves(gs.board, "b", gs.castlingRights, gs.enPassantTarget);
+      if (moves.length > 0) applyAiMove(moves[0]);
+      setAiThinking(false);
+    };
+
+    // Send board state to worker
+    worker.postMessage({
+      board: gs.board,
+      castlingRights: gs.castlingRights,
+      enPassantTarget: gs.enPassantTarget,
+      depth: 3,
+    });
+
+    return () => {
+      clearTimeout(safetyTimer);
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      URL.revokeObjectURL(workerUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs.turn, gs.status, mode]);
 
   // ── UNDO ───────────────────────────────────────────────
@@ -631,6 +716,7 @@ export default function ChessApp() {
   // ── RESET ──────────────────────────────────────────────
   const handleReset = useCallback(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null; }
     setAiThinking(false);
     setGs(getInitialGameState());
   }, []);
