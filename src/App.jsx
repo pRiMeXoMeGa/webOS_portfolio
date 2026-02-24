@@ -1,6 +1,7 @@
 import React from "react";
 import { useState, useEffect, useCallback, useRef, useReducer } from "react";
-
+import SnakeApp from "./SnakeApp";
+import ChessApp from "./ChessApp";
 // ============================================================
 // TYPES & CONSTANTS (TypeScript interfaces as JSDoc comments)
 // ============================================================
@@ -125,6 +126,8 @@ const DESKTOP_ICONS = [
   { id: "skills", label: "Skills Matrix", emoji: "⚡" },
   { id: "terminal", label: "Terminal", emoji: "💻" },
   { id: "contact", label: "Contact", emoji: "📬" },
+  { id: "snake", label: "Snake", emoji: "🐍" },
+  { id: "chess", label: "Chess", emoji: "♟️" },
 ];
 
 // ============================================================
@@ -195,6 +198,32 @@ const initialWindows = [
     y: 140,
     width: 500,
     height: 380,
+    zIndex: 10,
+  },
+  {
+    id: "snake",
+    title: "Snake",
+    emoji: "🐍",
+    isOpen: false,
+    isMinimized: false,
+    isMaximized: false,
+    x: 180,
+    y: 80,
+    width: 500,
+    height: 680,
+    zIndex: 10,
+  },
+  {
+    id: "chess",
+    title: "Chess",
+    emoji: "♟️",
+    isOpen: false,
+    isMinimized: false,
+    isMaximized: false,
+    x: 60,
+    y: 40,
+    width: 860,
+    height: 560,
     zIndex: 10,
   },
 ];
@@ -995,6 +1024,8 @@ export default function App() {
       case "skills": return <SkillsApp />;
       case "terminal": return <TerminalApp />;
       case "contact": return <ContactApp />;
+      case "snake": return <SnakeApp />;
+      case "chess": return <ChessApp />;
       default: return null;
     }
   }, []);
