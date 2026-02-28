@@ -730,7 +730,7 @@ function ContactApp() {
           { icon: "📧", label: "Email", value: "aqib.workplace@gmail.com", color: "#00d4aa" },
           { icon: "📱", label: "Phone", value: "+971 50 387 0649", color: "#60a5fa" },
           { icon: "📍", label: "Location", value: "United Arab Emirates", color: "#f97316" },
-          { icon: "🔗", label: "LinkedIn", value: "linkedin.com/in/mohd-aqib", color: "#a78bfa" },
+          { icon: "🔗", label: "LinkedIn", value: "linkedin.com/in/aqib-workspace", color: "#a78bfa" },
           { icon: "💻", label: "GitHub", value: "github.com/mohd-aqib", color: "#f1f5f9" },
         ].map((c) => (
           <div
