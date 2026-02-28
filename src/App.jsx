@@ -112,7 +112,6 @@ const SKILLS = [
   // Backend
   { name: "Python", level: 95, category: "Backend" },
   { name: "FastAPI / Flask", level: 90, category: "Backend" },
-  { name: "Java / Spring Boot", level: 78, category: "Backend" },
   { name: "Kafka / RabbitMQ", level: 80, category: "Backend" },
   // Cloud & Database
   { name: "PostgreSQL / MongoDB", level: 85, category: "Cloud & Database" },
