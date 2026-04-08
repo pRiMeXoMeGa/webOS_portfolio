@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, useReducer } from "react";
 import SnakeApp from "./SnakeApp";
 import ChessApp from "./ChessApp";
 import App2048 from "./App2048";
+import SpyGameApp from "./SpyGameApp";
 // ============================================================
 // TYPES & CONSTANTS (TypeScript interfaces as JSDoc comments)
 // ============================================================
@@ -129,6 +130,7 @@ const DESKTOP_ICONS = [
   { id: "snake", label: "Snake", emoji: "🐍" },
   { id: "chess", label: "Chess", emoji: "♟️" },
   { id: "2048", label: "2048", emoji: "🧩" },
+  { id: "spy", label: "Guess the Spy", emoji: "🕵️" },
 ];
 
 // ============================================================
@@ -238,6 +240,19 @@ const initialWindows = [
     y: 60,
     width: 520,
     height: 680,
+    zIndex: 10,
+  },
+  {
+    id: "spy",
+    title: "Guess the Spy",
+    emoji: "🕵️",
+    isOpen: false,
+    isMinimized: false,
+    isMaximized: false,
+    x: 140,
+    y: 80,
+    width: 680,
+    height: 600,
     zIndex: 10,
   },
 ];
@@ -1041,6 +1056,7 @@ export default function App() {
       case "snake": return <SnakeApp />;
       case "chess": return <ChessApp />;
       case "2048": return <App2048 />;
+      case "spy": return <SpyGameApp />;
       default: return null;
     }
   }, []);
@@ -1074,7 +1090,7 @@ export default function App() {
         </div>
 
         {/* Desktop Icons — top-left */}
-        <div style={{ position: "absolute", top: 20, left: 16, display: "flex", flexDirection: "column", gap: 4, zIndex: 2 }}>
+        <div style={{ position: "absolute", top: 20, left: 16, display: "flex", flexDirection: "column", flexWrap: "wrap", gap: 4, maxHeight: "calc(100vh - 88px)", zIndex: 2 }}>
           {DESKTOP_ICONS.map((icon) => (
             <DesktopIcon key={icon.id} icon={icon} onDoubleClick={() => openApp(icon.id)} />
           ))}
