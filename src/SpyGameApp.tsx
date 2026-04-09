@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, set, get, onValue, update, push } from 'firebase/database';
 import { db } from './firebase';
+import WordSpyApp from './WordSpyApp';
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ const LOCATIONS: LocationData[] = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type GameMode = 'menu' | 'local' | 'remote';
+type GameMode = 'menu' | 'local' | 'remote' | 'word';
 type LocalPhase = 'setup' | 'dealing' | 'playing' | 'voting' | 'result';
 type RemotePhase = 'lobby' | 'playing' | 'voting' | 'result';
 
@@ -101,6 +102,7 @@ export default function SpyGameApp() {
   if (mode === 'menu')   return <ModeMenu onSelect={setMode} />;
   if (mode === 'local')  return <LocalGame onBack={() => setMode('menu')} />;
   if (mode === 'remote') return <RemoteGame onBack={() => setMode('menu')} />;
+  if (mode === 'word')   return <WordSpyApp onBack={() => setMode('menu')} />;
   return null;
 }
 
@@ -145,6 +147,21 @@ function ModeMenu({ onSelect }: { onSelect: (m: GameMode) => void }) {
             <div style={{ fontWeight: 700, marginBottom: 4, color: C.accent }}>Play Online</div>
             <div style={{ color: C.muted, fontSize: 12, fontWeight: 400 }}>
               Play remotely! Each player joins with a room code on their own device.
+            </div>
+          </button>
+
+          <button
+            onClick={() => onSelect('word')}
+            style={{
+              ...btnBase, padding: '20px 24px', textAlign: 'left', fontSize: 15,
+              background: `linear-gradient(135deg, #1e1b4b, #2e1065)`,
+              color: C.text, border: `1px solid #818cf844`, borderRadius: 12,
+            }}
+          >
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔤</div>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: '#a78bfa' }}>Word Spy</div>
+            <div style={{ color: C.muted, fontSize: 12, fontWeight: 400 }}>
+              New! Everyone gets a word — the spy gets a different one. Give hints over 3 rounds, then vote!
             </div>
           </button>
         </div>
