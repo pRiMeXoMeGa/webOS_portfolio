@@ -597,14 +597,20 @@ export default function WordSpyApp({ onBack }: { onBack: () => void }) {
   }, [room, roomCode]);
 
   const markCardSeen = useCallback(async () => {
-    if (!roomCode || !myKey || !room) return;
+    if (!roomCode || !myKey) return;
     await update(ref(db, `wordRooms/${roomCode}/players/${myKey}`), { cardSeen: true });
-    // Start hints phase when last player has seen their card
-    const allSeen = Object.entries(room.players).every(([k, p]) => k === myKey ? true : p.cardSeen);
-    if (allSeen) {
-      await update(ref(db, `wordRooms/${roomCode}`), { phase: 'hints', round: 1 });
+  }, [roomCode, myKey]);
+
+  // ── Auto-advance: when all cards seen → hints phase ───────────────────────
+
+  useEffect(() => {
+    if (!room || !roomCode || room.phase !== 'reveal') return;
+    const entries = Object.entries(room.players);
+    if (entries.length === 0) return;
+    if (entries.every(([, p]) => p.cardSeen)) {
+      update(ref(db, `wordRooms/${roomCode}`), { phase: 'hints', round: 1 });
     }
-  }, [roomCode, myKey, room]);
+  }, [room, roomCode]);
 
   const submitHint = useCallback(async () => {
     const hint = hintInput.trim();
